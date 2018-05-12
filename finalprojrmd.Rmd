@@ -1,0 +1,306 @@
+```{r knitr_setup, echo=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+
+In this presentation, I will be analyzing Stanford data about mass shootings in the 60 year period 1966-2016. The dataset contains information about location, fatality count, injury count, motive, shooter demographics, mental illness histories, and more for mass shootings over 60 year period. We will take a deep dive into the relationship between state, gender, time, and likelihood of a mass shooting occurring. I'd like to pay particular attention to school shootings in some of our analysis as they have been coming more and more into the public eye in the past years. First, let's include the libraries we'll be using and set up our data set by reading from two csv files (we will use the population data set later on).
+
+```{r setup}
+library(tidyverse)
+library(stringr)
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(leaflet)
+library(htmltools)
+
+dataset <- read_csv("~/Downloads/shooting_data.csv")
+populations <- read_csv("~/Documents/state_populations.csv")
+```
+
+
+Our original data set contains a plethora of information. In our analysis, we will not be using all of it (i.e. detailed descriptions that we cannot incorporate into our graphs) so we will select only the attributes that we plan on using in our data analysis. Observe the data set after the selection of relevant attributes.
+
+```{r filtering}
+db <-  
+  dataset %>%
+    select(caseID, city, state, latitude, longitude, fatalities, injuries, num_victims, date, avg_shooter_age, shooter_sex,         shooter_race, gun_general, shooter_fate, shooter_death, school, place, relationship, victims_general, motive_general,           mental_illness, year)
+db
+```
+
+I'd like to preface our analysis by saying that there are varying definitions of mass shootings in the U.S. See this link for more information: https://www.ajc.com/news/national/what-mass-shooting-definitions-can-vary/xXdAVuOJrxoeoW0i1Q92mM/. This could be a possible explanation for why results may be slightly different depending on the data source you consult.
+
+Now that we have our data set up, we're ready to do some analysis. One way that we could categorize these shootings is by location. Perhaps mass shootings are more prevalent in some stats than others. Let's create some graphs using ggplot2 to visualize the data. We'll make the labels on the x-axis vertical using the theme command to avoid clutter and make the graph easier to read.
+
+```{r location_analysis}
+  count_by_states <- 
+    db %>% 
+    ggplot(aes(state)) + 
+    geom_bar(stat="count") + 
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  count_by_states
+```
+
+
+In the graph above, it's apparent that the majority of mass shootings happen in California. Our finding is consistent with the finding in other sources. See this website for additional information as well as confirmation of our findings: https://www.washingtonpost.com/graphics/2018/national/mass-shootings-in-america/?utm_term=.5345ce91d8f6. Is this out of the ordinary, though? After all, California has the largest population of any state in the U.S., so we'd expect it to have more shootings per capita than other states. Next, let's normalize this data by computing the number of mass shootings per capita in each of these states. This will help us to make a more fair analysis between different states. In order to do that, we'll need data on the population of each state. Note that this is imperfect as populations change over time, but it'll give us a better visualization of the data than what we have right now.
+
+In order to do this, let's first calculate the frequency of each state in our original data frame. Then, let's do an inner join with our populations table to find the population of each state. Once we have that, let's create a column in our new data frame that contains the per capita number of mass shootings. Then we can finally make a more accurate plot!
+
+```{r normalizing_state_differences}
+  freqs <- 
+    as.data.frame(table(db$state))
+  colnames(freqs) <- 
+    c("state", "frequency")
+  freqs <- 
+    freqs %>% 
+    merge(populations, by = "state")
+  freqs$shootings_per_capita <- 
+    freqs$frequency / freqs$population
+  per_capita_plot <-
+    ggplot(data=freqs, aes(x=state, y=shootings_per_capita)) + 
+    geom_bar(stat="identity") + 
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  per_capita_plot
+```
+
+Note that these results are only for mass shootings. The rankings look a bit different if you take into account all firearm deaths. Check out this link for more details: https://www.usatoday.com/story/news/nation/2018/02/21/states-most-and-least-gun-violence-see-where-your-state-stacks-up/359395002/
+
+This is much more enlightening than our last graph. Here we can see that although California has the highest total number of shootings, its per capita number of shootings is somewhere in the middle of the pack. Other states, like New Mexico and Alabama, have very high per capita rates of mass shootings, while states like Indiana and Iowa both have very low per capita rates of mass shootings. This gives us a more clear picture of how prevalent mass shootings are with regards to how many people live in each state.
+
+Now that we've analyzed differences in mass shooting tendencies by state, let's take a look at differences in a shooter's gender. This will help us see what proportion of shooters are men and what proportion are women. Let's first create a graph of the number of mass shootings committed by each gender.
+
+```{r sex_differences}
+  sex_differences_graph <-
+    db %>% 
+    ggplot(aes(shooter_sex)) + 
+    geom_bar(stat="count") +
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  sex_differences_graph
+```
+
+There is some missing data, but the VAST majority of mass shootings are committed by men, with a few committed by women and a few committed by men and women together. This finding is supported here https://www.statista.com/statistics/476445/mass-shootings-in-the-us-by-shooter-s-gender/. Check out that link for support of our finding, and I encourage you to explore it for any of your statistical needs. Regardless of how you interpret the unknown results, it's indisputable that most mass shootings are committed by men. Even though there aren't exactly as many women as men in the U.S., the difference is marginal enough for us to compare them without having to normalize using the ratios. Let's transition to another frame of analysis and let's see how race plays a role. Below, we will plot the same graph but use race as our categorical variable.
+
+```{r race_differences}
+  race_differences_graph <-
+    db %>%
+    ggplot(aes(shooter_race)) +
+    geom_bar(stat="count") +
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  race_differences_graph
+```
+
+
+Here there is also some missing data, but the data still show that most shootings are committed by White or European Americans, with Black or African Americans coming next. Again, this may be more of an apples to oranges comparison: White Americans are the most populous race demographic in America, so we'd expect them to make up the majority of the people. Regardless, it is interesting to see how certain demographics are not represented very much (for example, Hispanics/Latinos make up a large chunk of the US population, but they don't make up a sizeable amount of the number of mass shooters).
+
+Another important characteristic of shootings is the shooter's relationship to the shooting. For example, it is important to know if the shooting was random and without direct motive or if it happened because a person was bullied at school or vengeful against a group of people. This distinction is important because it better helps us understand why people commit mass shootings, and what we can do to reduce their frequency in the future. Let's examine the relationship between shooters and their mass shootings below.
+
+```{r relationships}
+  relationships_graph <-
+    db %>%
+    ggplot(aes(relationship)) +
+    geom_bar(stat="count") +
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  relationships_graph
+```
+
+The results are interesting. In modern history, there are lots of stories of deadly school shootings and often our attention is directed to those shootings because of how particularly horrible they are. But it is important to know that mass shootings are not limited to schools; in fact, we see here that most mass shootings actually happen in a person's place of residency, followed by a person's place of employment and a person's school. This lets us know that issues in these areas (which often are the three main areas in a person's life) may provoke mass shootings.
+
+We've done a great deal of categorical analysis, and while that is descriptive in its own way, it doesn't show trends over time. Our dataset has the time (in years) of each shooting, so we can use that to analyze how certain aspects of mass shootings change over time. Let's write some R code to determine if the number of mass shootings has changed over time.
+
+```{r fatality_time_analysis}
+  time_box <- 
+    db %>%
+    ggplot(aes(year)) +
+    geom_bar(stat="count") +
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  time_box
+```
+
+The results are astounding. In more recent years, the number of annual mass shootings has increased significantly. Before 2010, we seldom had more than 10 mass shootings a year. After 2010, we almost only had more than 10 mass shootings per year. Aside from solely looking at the number of mass shootings, we should also consider how deadly they were; i.e., how many fatalities they were in each shooting. That way we can see if shootings became more deadly over time, or if they just became more prevalent. Let's write code for this below. This time, we'll do a line plot and use the geom smooth function with method lm to create a regression line for our data as well.
+
+```{r fatalities_over_time}
+  fatality_time_regression <- 
+    db %>%
+    ggplot(aes(x=year, y=fatalities)) +
+    geom_point() +
+    geom_smooth(method="lm")
+  fatality_time_regression
+```
+
+The graph above shows how the amount of people who die in a given mass shooting has actually decreased slightly over time. This isn't completely surprising, though: it could be the case that while the number of mass shootings have increased, most aren't as large scale as they were in the 1970s and 1980s. While the average amount of people killed in each mass shooting may have gone down, the total number of people killed per year has gone up. Let's create a regression line that shows that relationship. We can find the aggregate number of fatalities for each year using the aggregate function.
+
+```{r total_fatality_regression}
+  fatalities_over_time <-
+    aggregate(fatalities ~ year, db, sum)
+  fatality_regression <- 
+    fatalities_over_time %>%
+    ggplot(aes(x=year, y=fatalities)) + 
+    geom_point() + 
+    geom_smooth(method=lm)
+  fatality_regression
+```
+
+
+We can see that there is a noticeable positive relationship between year and the number of fatalities in mass shootings in that given year. Let's do some testing to see if this relationship is statistically significant enough for us to be worried about this trend. To do that, we should run a hypothesis test of the data.
+
+```{r model_analysis}
+  model <-
+    lm(fatalities~year, data=fatalities_over_time)
+  tidied_model <- 
+    model %>%
+    tidy() %>%
+    select(term, estimate, statistic, p.value)
+  tidied_model
+```
+
+Here we can see the p-value of the slope of the regression line is .0002 (which is < .05), so we can be confident in a statistical sense that there is a positive correlation between year and the number of fatalities in a given year. See this link https://www.investopedia.com/terms/s/statistically_significant.asp for more information on statistical significance. The  estimate of the slope in this case is about 1.429, meaning that on average 1.429 more people die every year than the previous due to mass shootings. But is a linear model the best possible fit, or is this trend quadratic, cubic, or worse? Let's look at the residual plot to examine whether a linear fit is appropriate for our data.
+
+```{r residuals}
+  residuals <-
+    model %>%
+    augment()
+  residual_plot <-
+    residuals %>% 
+    ggplot(aes(x=year, y=.resid)) +
+    geom_point() 
+  residual_plot
+```
+
+Here we can see that residuals aren't completely identically distributed, meaning a linear model may be the best fit. Regardless, our result was certainly statistically significant and we can be confident that the number of mass shooting fatalities is increasing with every passing year in the U.S. That is a cause for concern. 
+
+We've done some analysis of how state location plays into likelihood of mass shootings, but we don't have a visual aid for that. Let's create a leaflet to visualize exactly where these mass shootings tend to happen.
+
+```{r map}
+
+  pal <- 
+    colorNumeric(
+      palette = "Spectral",
+      domain = db$fatalities
+    )
+  map <- 
+    db %>%
+    leaflet() %>%
+    addTiles() %>%
+    setView(lat=40, lng=-96, zoom=4) %>%
+    addCircles(lng = ~longitude, lat = ~latitude, weight = 5, radius = 250, color = ~pal(fatalities)) %>%
+    addLegend("topright", pal = pal, values = ~fatalities,
+      title = "Fatality Count",
+      opacity = 1
+    )
+  map
+```
+
+From this graph, it looks like most mass shootings occur in urbanized areas on the east coast. Feel free to explore the graph for more data points and to make your own conclusions about where mass shootings tend to happen.
+
+In recent years, we've started to pay more attention to mental illness as a potential explanation for mass shootings. Fortunately, our data set contains some information about whether a given shooter had a mental illness. There is missing data, but we can filter that out and compare how many shooters had mental illnesses to how many shooters didn't have mental illnesses. Let's do that below.
+
+```{r mental_illness_comparison}
+  mental_illness_bar <-
+    db %>%
+      filter(mental_illness == "Yes" | mental_illness == "No") %>%
+      ggplot(aes(mental_illness)) + 
+      geom_bar(stat="count") + 
+      theme(axis.text.x=element_text(angle=-90, hjust=0))
+  mental_illness_bar  
+```
+
+Interesting. We see that about half of mass shootings where we know a person's mental state of mind are caused by people with mental illnesses, while the other half are caused by people without mental illnesses. Because there has been a lot of discussion in recent years about school shooters having mental illnesses, let's take a more detailed look and see how many school shooters have mental illnesses compared to those who do not.
+
+```{r school_mental_illness}
+  school_mental_illness_bar <-
+    db %>%
+      filter(mental_illness == "Yes" | mental_illness == "No") %>%
+      filter(school == "Yes") %>%
+      ggplot(aes(mental_illness)) + 
+      geom_bar(stat="count") + 
+      theme(axis.text.x=element_text(angle=-90, hjust=0))
+  school_mental_illness_bar  
+```
+
+
+Here, we see a pretty significant difference. Just under 40 school shooters we know had mental illnesses, while not even 25 didn't have mental illnesses. This information may be useful when trying to figure out which preventative measures we can take to avoid school shooters in the future.
+
+After seeing these graphs, it is clear that mental illness has a significant impact on mass shootings. Articles like these https://www.politico.com/magazine/story/2018/01/17/gun-violence-masculinity-216321 may be true in that men are responsibly for most mass shootings, but they are very wrong in saying that mental illness is not a factor. As can be seen above, around 60% of school shootings are committed by people with mental illnesses. It is a bad idea to blame one factor for mass shootings - they can arise for a multitude of reasons, and singling one out is simply inaccurate, as evidenced by these graphs.
+
+Another important thing to understand when trying to prevent mass shootings in the future is motive. We should figure out what the main motives people have when committing shootings. Let's create another plot for that. I'll exclude mental illnesses from that graph so we can focus on other reasons people commit shootings. Another thing I'll exclude is multiple motives so we can focus on singular motives.
+
+
+```{r motive}
+  motive <- 
+    db %>% 
+    filter(motive_general != "Unknown") %>%
+    filter(motive_general != "Mental illness") %>%
+    filter(motive_general != "Multiple motives") %>%
+    ggplot(aes(motive_general)) + 
+    geom_bar(stat="count") + 
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  motive
+```
+
+Here we can see that the next most prominent motives are domestic and social disputes. Somewhat surprisingly, things like drug use or robbery are rarely the cause of mass shootings. This information could help us know what to focus on so we could prevent mass shootings in the future.
+
+Let's see if this changes among school shooters. I'd like to focus on school shooters because they have become increasingly common in recent years. We'll do this below using filters and ggplot.
+
+```{r school_motive}
+  motive2 <- 
+    db %>% 
+    filter(motive_general != "Unknown") %>%
+    filter(motive_general != "Mental illness") %>%
+    filter(motive_general != "Multiple motives") %>%
+    filter(school == "Yes") %>%
+    ggplot(aes(motive_general)) + 
+    geom_bar(stat="count") + 
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  motive2
+```
+
+While the largest contributor to school shootings is a social dispute, we shouldn't neglect the second most common reason: failure. Perhaps this means that we need to increase support for students who are failing, and help them out along the way to keep their mental health in a good state. Another common reason is expulsion/suspension - this is also something we could work on. These are all policy questions that need to be shaped by legislators and school boards, but it is important to know the data so we can create policy based on it.
+
+It looks like this page http://www.socialjusticesolutions.org/2013/12/14/school-shootings-possible-causes/ hit the nail right on the head. The main reasons school shootings seem to happen is because of social issues (bullying), class difficulty (failure), or mental illness, which we can see in other graphs.
+
+We've seen how the number of shootings have changed over time, but we haven't seen specifically how school shootings (fatality count) have changed over time. Let's take a look at that.
+
+```{r school_shootings_over_time}
+  school_time_box <- 
+    db %>%
+    filter(school == "Yes") %>%
+    ggplot(aes(year)) +
+    geom_bar(stat="count") +
+    theme(axis.text.x=element_text(angle=-90, hjust=0))
+  school_time_box
+```
+
+The results are very surprising. At least in the media, we hear about school shootings much more today than we did in the past. However, the number of school shootings hasn't actually increased very much since the 1990s. It's important to stay aware of how what we see in the media may not be reflective of what's actually going on in the country, and this is some evidence that the number of school shootings hasn't increased as much as we may have previously thought. Perhaps one reason for this is that school shootings have gotten more deadly over the years. Let's test out this theory.
+
+
+```{r school_fatality_over_time}
+  
+filtered_db <- 
+  db %>%
+  filter(school == "Yes")
+        
+fatalities_over_time <-
+      aggregate(fatalities ~ year, filtered_db, sum)
+fatality_regression2 <- 
+  fatalities_over_time %>%
+  ggplot(aes(x=year, y=fatalities)) + 
+  geom_point() + 
+  geom_smooth(method=lm)
+fatality_regression2
+
+```
+
+In fact, it seems like our theory wasn't true. Actually, it looks like many assumptions people make in articles isn't true, see https://www.cbsnews.com/news/florida-shooting-whats-driving-the-increase-in-deadly-school-shootings/. Many people, including myself, assumed that the number of school shootings has gone up over time, but that's not completely true - there have just been a couple very deadly outliers, but overall the trend has not changed much. Additionally, the average number of people killed in each school shooting has not changed very much; however, there were two notable school shootings in recent years that had large numbers of fatalities which may be why we feel like they have gotten significantly worse over the years. 
+
+As a whole, the goal in this data analysis was to clear up misconceptions people may have about school shootings and mass shootings in general and to provide information on how we could shape policy to prevent them occurring in the future. I wanted to highlight primary reasons behind why school shootings happen, illustrate where they are likely to happen, and focus on target areas that we can improve on to prevent shootings in the future. For example, it is clear that some students may need more support when failing classes or when being suspended. It is also clear that we need to be aware of mental health issues people and students may have, and address them before something tragic happens. Further, I wanted to draw attention to whether school shootings are a cause for alarm: that is, whether they are amplifying in number and intensity or if we only perceive that because of media or other reasons. It turns out that while they are more common today, they tend to be smaller in scope. Regardless, the number of people dying each year from school shootings is increasing and it is our job to work to fix that. Let's try our best as people to make that regression line slope downwards in the future.
+
+
+
+
+
+
+
+
+
+
+
